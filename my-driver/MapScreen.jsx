@@ -1,131 +1,174 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import * as Location from 'expo-location';
-// import getLocationName from "./utils/findlocation.js"
-import axios from 'axios';
+import React, { useEffect, useRef, useState } from "react";
+import { StyleSheet, View, Text, Pressable, TouchableHighlight, TouchableOpacity } from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import * as Location from "expo-location";
+import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
+import url from "url";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation } from '@react-navigation/native';
 
 
+const MapScreen = ({userId}) => {
+    const navigation = useNavigation();
+
+    const previousLocationRef = useRef(null);
+
+  const supabaseUrl = "https://yrljbdsdwdffgtddieyy.supabase.co";
+  const supabaseKey =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlybGpiZHNkd2RmZmd0ZGRpZXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODAxMTA0NTEsImV4cCI6MTk5NTY4NjQ1MX0.sy-cBRj5In39YaNBon4gUfXsplvvovPHoYdjjrh33Bw";
+
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
+  const mapViewRef = useRef(null);
+  const [location, setLocation] = useState(null);
+  const [mylocation, setMyLocation] = useState(null);
+
+  const getLocationName = async (latitude, longitude) => {
+    try {
+      const response = await axios.get(
+        `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=7b483ce86cff4b878e10e62c449e0619&no_annotations=1`
+      );
+
+      if (response.data.results.length > 0) {
+        setMyLocation(response.data.results[0].formatted);
+        return response.data.results[0].formatted;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+        getLocationName(location.latitude,location.longitude)
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        return;
+      }
+      const { coords } = await Location.getCurrentPositionAsync({});
+      setLocation({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+//   useEffect(() => {
+//     if (location && location !== previousLocationRef.current) {
+//       getLocationName(location.latitude, location.longitude);
+//       supabase
+//         .from("user_locations")
+//         .upsert({user_id: userId, lat: location.latitude, long: location.longitude })
+//         .then((res) => console.log(res));
+//       previousLocationRef.current = location;
+//     }
+//   }, [location]);
+// useEffect(() => {
+//     if (location) {
+//       // Fetch the previous location data for the user ID
+//       supabase
+//         .from("user_locations")
+//         .select("lat, long")
+//         .eq("user_id", userId)
+//         .limit(1)
+//         .single()
+//         .then(({ data: previousLocationData, error }) => {
+//           if (error) {
+//             // Handle error when fetching previous location data
+//             console.log("Error fetching previous location data:", error);
+//           } else {
+//             // Compare the new location data with the previous location data
+//             const { latitude, longitude } = location;
+//             const { lat: previousLatitude, long: previousLongitude } = previousLocationData || {};
+    
+//             if (latitude !== previousLatitude || longitude !== previousLongitude) {
+//               // Update the location data in the user_locations table
+//               supabase
+//                 .from("user_locations")
+//                 .upsert({ user_id: userId, lat: latitude, long: longitude })
+//                 .then((res) => console.log(res));
+//             } else {
+//               console.log("New location data is the same as previous data. Skipping update.");
+//             }
+//           }
+//         });
+//     }
+//   }, [location]);
 
 
+useEffect(() => {
+    if (location) {
+      // Remove the previous location data for the user ID
+      supabase
+        .from("user_locations")
+        .delete()
+        .eq("user_id", userId)
+        .then(() => {
+          // Insert the current location data in the user_locations table
+          const { latitude, longitude } = location;
+          supabase
+            .from("user_locations")
+            .upsert({ user_id: userId, lat: latitude, long: longitude })
+            .then((res) => console.log(res));
+        })
+        .catch((error) => {
+          // Handle error when removing previous location data
+          console.log("Error removing previous location data:", error);
+        });
+    }
+  }, [location]);
+  
+    
 
-
-const MapScreen = () => {
-    const [location, setLocation] = useState({ latitude: 0, longitude: 0 });
-    const [mylocation, setmylocation] = useState(null)
-    const mapViewRef = useRef()
-
-
-    const getLocationName = async (latitude, longitude) => {
-        console.log(longitude, latitude)
-        try {
-            const response = await axios.get(
-                `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=7b483ce86cff4b878e10e62c449e0619&no_annotations=1`
-            );
-
-            if (response.data.results.length > 0) {
-                setmylocation(response.data.results[0].formatted)
-                return response.data.results[0].formatted;
-            } else {
-                return null;
-            }
-        } catch (error) {
-            console.error(error);
-            return null;
-        }
-    };
-
-
-    useEffect(() => {
-        // get current location and update it every 3 seconds
-        const interval = setInterval(async () => {
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                return;
-            }
-
-            let { coords } = await Location.getCurrentPositionAsync({});
-            setLocation({
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-
-
-                latitudeDelta: 0.0922,
-                longitudeDelta: 0.0421,
-            })
-            const data = getLocationName(location?.latitude, location.longitude)
-            //   alert(data)
-            // setmylocation(data)
-            // console.log("data", data)
-
-
-            console.log("mylocation",mylocation)
-
-
-
-        }, 1000);
-
-
-        // console.log(location.latitude,location.longitude)
-
-
-        // cleanup function to clear the interval
-        return () => clearInterval(interval);
-    }, []);
-
-    return (
-        <View style={styles.container}>
-            {location && (
-                // <MapView
-                //     style={{ flex: 1 }}
-                //     ref={mapViewRef}
-                //     onLayout={() => {
-                //         mapViewRef.current.fitToCoordinates(coordinates, {
-                //             edgePadding: { top: 10, right: 10, bottom: 10, left: 10 },
-                //             animated: true,
-                //         });
-                //     }}
-                // >
-
-
-                //     <Marker
-                //         coordinate={location}
-                //         title="Your location"
-                //         description="You are here"
-                //     />
-                // </MapView>
-                // console.log(location)
-                <View style={{
-                    marginTop: 50, width:200
-                }}>
-                    <Text style={{ fontWeight: 800 }}>Latitude: {location.latitude}</Text>
-                    <Text style={{ fontWeight: 800 }}> Longitude: {location.longitude}</Text>
-
-                    <Text >{mylocation}</Text>
-                </View>
-
-            )}
-            {!location && (
-                <View style={styles.textContainer}>
-                    <Text>Please enable location services</Text>
-                </View>
-            )}
+  return (
+    <View style={styles.container}>
+      {location && (
+        <View style={styles.textContainer}>
+          <Text style={{ fontWeight: "800" }}>
+            Your Latitude: {location.latitude}
+          </Text>
+          <Text style={{ fontWeight: "800" }}>
+            Your Longitude: {location.longitude}
+          </Text>
+          <Text>You are at {mylocation}</Text>
+          <TouchableOpacity onPress={()=>navigation.navigate("App")}><Text>
+          {/* Return to Back! */}
+            </Text></TouchableOpacity>
         </View>
-    );
+      )}
+      {!location && (
+        <View style={styles.textContainer}>
+          <Text>Please enable location services</Text>
+
+        </View>
+      )}
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    map: {
-        flex: 1,
-    },
-    textContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+  container: {
+    flex: 1,
+  },
+  textContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 50,
+    width: 200,
+  },
 });
 
 export default MapScreen;

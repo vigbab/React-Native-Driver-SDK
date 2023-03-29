@@ -11,6 +11,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "jscEngine": {
+      "useCustomEngine": true,
+      "fallbackToV8": true
+    },
+
     "assetBundlePatterns": [
       "**/*"
     ],
